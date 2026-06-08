@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PR #1015 — Assumption Verification Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+    padding: 2rem;
+  }
+
+  header {
+    max-width: 1100px;
+    margin: 0 auto 2.5rem;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 1.5rem;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #e6edf3;
+    margin-bottom: 0.4rem;
+  }
+
+  header .meta {
+    font-size: 0.85rem;
+    color: #8b949e;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+
+  header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  .assumptions {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .card:hover { border-color: #58a6ff; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid #30363d;
+    background: #0d1117;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header:hover { background: #161b22; }
+
+  .card-header .num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+
+  .card-header h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e6edf3;
+    flex: 1;
+  }
+
+  .badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.2rem 0.65rem;
+    border-radius: 20px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .badge-confirmed    { background: #0d4429; color: #3fb950; border: 1px solid #238636; }
+  .badge-refuted      { background: #3d0914; color: #f85149; border: 1px solid #da3633; }
+  .badge-unverifiable { background: #1c2128; color: #e3b341; border: 1px solid #9e6a03; }
+
+  .chevron {
+    color: #8b949e;
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .card.open .chevron { transform: rotate(90deg); }
+
+  .card-body {
+    display: none;
+    padding: 1.25rem;
+  }
+
+  .card.open .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+  @media (max-width: 720px) {
+    .card.open .card-body { grid-template-columns: 1fr; }
+  }
+
+  .pane { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .pane-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .pane-label .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  .pane-label .dot-blue   { background: #388bfd; }
+  .pane-label .dot-green  { background: #3fb950; }
+  .pane-label .dot-red    { background: #f85149; }
+  .pane-label .dot-yellow { background: #e3b341; }
+
+  .pane-content {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+    flex: 1;
+  }
+
+  .pane-content p { margin-bottom: 0.6rem; }
+  .pane-content p:last-child { margin-bottom: 0; }
+
+  .pane-content code {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.8rem;
+    color: #d2a8ff;
+  }
+
+  .pane-content .where {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #21262d;
+    font-size: 0.8rem;
+    color: #8b949e;
+  }
+
+  .verdict-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .verdict-section { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  .verdict-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8b949e;
+  }
+
+  .verdict-section-body {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+  }
+
+  .verdict-section-body code {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.8rem;
+    color: #d2a8ff;
+  }
+
+  .summary-box {
+    max-width: 1100px;
+    margin: 2rem auto 0;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+
+  .summary-box h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8b949e;
+    margin-bottom: 0.75rem;
+  }
+
+  .summary-box p {
+    font-size: 0.875rem;
+    color: #c9d1d9;
+    line-height: 1.65;
+  }
+
+  .score-row {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .score-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .score-pill .n { font-size: 1.1rem; font-weight: 700; }
+  .score-pill.confirmed    .n { color: #3fb950; }
+  .score-pill.refuted      .n { color: #f85149; }
+  .score-pill.unverifiable .n { color: #e3b341; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PR #1015 — Refactor createKnowledgeSuggestionTask to reduce payload parameters</h1>
+  <div class="meta">
+    <span>📦 liam-hq/liam</span>
+    <span>🔀 <a href="https://github.com/liam-hq/liam/pull/1015" target="_blank" style="color:#58a6ff;text-decoration:none;">Pull Request #1015 ↗</a></span>
+    <span>🔖 Commit <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">893a397b</code></span>
+    <span>📄 2 files changed: <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">processCreateKnowledgeSuggestion.ts</code>, <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">jobs.ts</code></span>
+    <span>🤖 Agent: <strong style="color:#e6edf3">Devin</strong></span>
+  </div>
+</header>
+
+<div class="assumptions" id="assumptions"></div>
+
+<div class="summary-box" id="summary-box">
+  <h3>Overall Summary</h3>
+  <div class="score-row" id="score-row"></div>
+  <p id="summary-text"></p>
+</div>
+
+<script>
+const data = [
+  {
+    id: 1,
+    label: "Every projectId resolves to an existing project in the database",
+    verdict: "confirmed",
+    claim: `When <code>processCreateKnowledgeSuggestion</code> is called, the <code>projectId</code> in the payload always resolves to an existing row via <code>prisma.project.findUnique</code>. If a project has been deleted or the ID is stale, the function now throws an error instead of silently propagating the caller-supplied values.`,
+    where: `Call sites that enqueue <code>createKnowledgeSuggestionTask</code> — specifically <code>generateDocsSuggestionTask</code> in <code>frontend/packages/jobs/src/trigger/jobs.ts</code> — to confirm <code>projectId</code> is always sourced from a DB-validated context before being passed.`,
+    evidence: `<code>processCreateKnowledgeSuggestion.ts</code> calls <code>prisma.project.findUnique({ where: { id: projectId } })</code> and throws <code>'Repository information not found for the project'</code> if <code>!project</code>. The caller in <code>jobs.ts</code> sources <code>projectId</code> from its own payload, which originates from a prior DB-validated flow. The guard is present and will surface stale/deleted project IDs as explicit errors rather than silent propagation.`,
+  },
+  {
+    id: 2,
+    label: "Every project has at least one repositoryMapping with a populated repository",
+    verdict: "unverifiable",
+    claim: `<code>project.repositoryMappings[0]?.repository</code> is non-null for every project that will ever reach this function. The guard <code>throw new Error('Repository information not found...')</code> is treated as an exceptional case, not a normal runtime path.`,
+    where: `The <code>repositoryMappings</code> relation definition in the Prisma schema, and whether there is any application flow that creates a project without a repository mapping before this task can be triggered.`,
+    evidence: `The Prisma schema defines <code>repositoryMappings ProjectRepositoryMapping[]</code> on <code>Project</code> (zero-or-many; no minimum cardinality constraint). There is no DB-level constraint guaranteeing at least one mapping exists at the time this task runs. Whether the application flow always creates a mapping before the task can be triggered is outside the scope of the two changed files and their direct dependencies.`,
+  },
+  {
+    id: 3,
+    label: "take: 1 always selects the correct repository",
+    verdict: "unverifiable",
+    claim: `Each project has exactly one relevant repository mapping. Using <code>take: 1</code> with no <code>orderBy</code> means the result is deterministic only if projects have at most one mapping. If a project can have multiple mappings, the first one returned depends on DB insertion order, which may not be the intended one.`,
+    where: `The Prisma schema for <code>repositoryMappings</code> relation cardinality, and whether any project in production has more than one mapping.`,
+    evidence: `The Prisma schema defines <code>ProjectRepositoryMapping</code> with a <code>@@unique([projectId, repositoryId])</code> constraint — this prevents duplicate mappings for the same project+repository pair but does <em>not</em> prevent a project from having multiple distinct repository mappings. No <code>orderBy</code> clause is present in the <code>take: 1</code> query, so ordering is non-deterministic when multiple mappings exist. Whether any project in production has more than one mapping cannot be determined from the files in scope.`,
+  },
+  {
+    id: 4,
+    label: "repository.installationId is safely castable to Number()",
+    verdict: "refuted",
+    claim: `<code>installationId</code> is stored in the DB as a type that <code>Number()</code> converts without loss. If it is <code>null</code>, <code>undefined</code>, or a non-numeric string, <code>Number()</code> produces <code>NaN</code> or <code>0</code>, which would silently corrupt downstream behaviour rather than throwing.`,
+    where: `The Prisma schema field type for <code>repository.installationId</code>, and how the downstream <code>installationId</code> value is used after this function (e.g. passed to a GitHub API call that requires a valid integer).`,
+    evidence: `The Prisma schema defines <code>installationId BigInt</code> on the <code>Repository</code> model. <code>Number(BigInt)</code> works in JavaScript but silently loses precision for values exceeding <code>Number.MAX_SAFE_INTEGER</code> (2<sup>53</sup>−1). GitHub installation IDs are currently well below this threshold in practice, and the field is non-nullable so <code>null</code>/<code>undefined</code> is not a concern. The same <code>Number(repository.installationId)</code> pattern also appears in <code>getInstallationIdFromRepositoryId.ts</code>, indicating this is an established codebase convention — not a new risk introduced by this PR.`,
+  },
+  {
+    id: 5,
+    label: "repository.owner and repository.name are never null",
+    verdict: "confirmed",
+    claim: `The <code>owner</code> and <code>name</code> fields on the <code>repository</code> model are non-nullable, so <code>repositoryFullName</code> constructed as <code>\`\${repositoryOwner}/\${repositoryName}\`</code> is always a valid string. If either were nullable, the string could silently become <code>"null/undefined"</code>.`,
+    where: `The Prisma schema <code>Repository</code> model field definitions for <code>owner</code> and <code>name</code>.`,
+    evidence: `The Prisma schema defines both fields as <code>name String</code> and <code>owner String</code> (non-nullable, no <code>?</code>) on the <code>Repository</code> model. <code>repositoryFullName</code> will always be a valid string assuming the DB constraint is honoured.`,
+  },
+  {
+    id: 6,
+    label: "Removing three fields from generateDocsSuggestionTask's trigger call doesn't break its payload contract",
+    verdict: "confirmed",
+    claim: `<code>generateDocsSuggestionTask</code> previously passed <code>repositoryOwner</code>, <code>repositoryName</code>, and <code>installationId</code> to <code>createKnowledgeSuggestionTask.trigger()</code>. Removing them requires that the trigger's payload type has also been updated to not expect those fields — otherwise TypeScript would catch this at compile time, but a Trigger.dev runtime schema mismatch could silently fail.`,
+    where: `The updated <code>createKnowledgeSuggestionTask</code> payload type definition in <code>jobs.ts</code> and whether Trigger.dev performs runtime payload validation on top of TypeScript types.`,
+    evidence: `In <code>jobs.ts</code>, <code>createKnowledgeSuggestionTask</code>'s inline payload type is <code>{ projectId: number; type: 'SCHEMA' | 'DOCS'; title: string; path: string; content: string }</code> — <code>repositoryOwner</code>, <code>repositoryName</code>, and <code>installationId</code> are absent. The trigger call from <code>generateDocsSuggestionTask</code> passes exactly those five fields. TypeScript types are consistent and no mismatch is present in the code in scope.`,
+  },
+  {
+    id: 7,
+    label: "prisma is imported in processCreateKnowledgeSuggestion",
+    verdict: "confirmed",
+    claim: `The new DB query uses <code>prisma</code> directly, so the module must import a configured Prisma client instance. If the import was not added, the function would throw a <code>ReferenceError</code> at runtime.`,
+    where: `The import section at the top of <code>frontend/packages/jobs/src/functions/processCreateKnowledgeSuggestion.ts</code>.`,
+    evidence: `Line 1 of <code>processCreateKnowledgeSuggestion.ts</code>: <code>import { prisma } from '@liam-hq/db'</code>. The import is present and correctly placed.`,
+  },
+];
+
+const summaryText = `The patch is structurally sound: TypeScript types are consistent after removing the three payload fields, <code>prisma</code> is correctly imported, and <code>owner</code>/<code>name</code> are non-nullable in the schema. The main residual risks are (1) the <code>BigInt</code>-to-<code>Number</code> conversion for <code>installationId</code>, which silently loses precision for very large values — though this is an existing codebase pattern unlikely to cause issues with current GitHub ID ranges; and (2) the lack of a DB-level guarantee that a project always has at least one repository mapping before this task runs, meaning the error guard in Assumption 2 is a real runtime path, not just exceptional. No assumptions were outright refuted in a way that would block the PR, though Assumptions 2 and 3 represent latent runtime risks worth monitoring.`;
+
+const verdictMeta = {
+  confirmed:    { label: "✅ Confirmed",    cls: "badge-confirmed",    dot: "dot-green"  },
+  refuted:      { label: "❌ Refuted",      cls: "badge-refuted",      dot: "dot-red"    },
+  unverifiable: { label: "❓ Unverifiable", cls: "badge-unverifiable", dot: "dot-yellow" },
+};
+
+function buildCard(item) {
+  const vm = verdictMeta[item.verdict];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="num">A${item.id}</span>
+      <h2>${item.label}</h2>
+      <span class="badge ${vm.cls}">${vm.label}</span>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="card-body">
+      <div class="pane">
+        <div class="pane-label"><span class="dot dot-blue"></span>Phase 1 — Assumption</div>
+        <div class="pane-content">
+          <p>${item.claim}</p>
+          <div class="where"><strong>Where to look:</strong> ${item.where}</div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-label"><span class="dot ${vm.dot}"></span>Phase 2 — Verdict</div>
+        <div class="verdict-row">
+          <div class="verdict-section">
+            <div class="verdict-section-label">Evidence</div>
+            <div class="verdict-section-body">${item.evidence}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function toggleCard(header) {
+  const card = header.closest(".card");
+  card.classList.toggle("open");
+}
+
+const container = document.getElementById("assumptions");
+data.forEach(item => container.appendChild(buildCard(item)));
+
+// Score row
+const counts = { confirmed: 0, refuted: 0, unverifiable: 0 };
+data.forEach(d => counts[d.verdict]++);
+const scoreRow = document.getElementById("score-row");
+[
+  { key: "confirmed",    label: "Confirmed"    },
+  { key: "refuted",      label: "Refuted"      },
+  { key: "unverifiable", label: "Unverifiable" },
+].forEach(({ key, label }) => {
+  const pill = document.createElement("div");
+  pill.className = `score-pill ${key}`;
+  pill.innerHTML = `<span class="n">${counts[key]}</span><span>${label}</span>`;
+  scoreRow.appendChild(pill);
+});
+
+document.getElementById("summary-text").innerHTML = summaryText;
+
+// Open first card by default as a hint
+document.querySelectorAll(".card")[0].classList.add("open");
+</script>
+</body>
+</html>

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PR #35372 — Assumption Verification Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+    padding: 2rem;
+  }
+
+  header {
+    max-width: 1100px;
+    margin: 0 auto 2.5rem;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 1.5rem;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #e6edf3;
+    margin-bottom: 0.4rem;
+  }
+
+  header .meta {
+    font-size: 0.85rem;
+    color: #8b949e;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+
+  header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  .alert {
+    max-width: 1100px;
+    margin: 0 auto 2rem;
+    background: #3d0914;
+    border: 1px solid #da3633;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    font-size: 0.875rem;
+    color: #f85149;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .alert .icon { font-size: 1rem; margin-top: 0.05rem; flex-shrink: 0; }
+
+  .assumptions {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .card:hover { border-color: #58a6ff; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid #30363d;
+    background: #0d1117;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header:hover { background: #161b22; }
+
+  .card-header .num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+
+  .card-header h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e6edf3;
+    flex: 1;
+  }
+
+  .badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.2rem 0.65rem;
+    border-radius: 20px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .badge-confirmed    { background: #0d4429; color: #3fb950; border: 1px solid #238636; }
+  .badge-refuted      { background: #3d0914; color: #f85149; border: 1px solid #da3633; }
+  .badge-unverifiable { background: #1c2128; color: #e3b341; border: 1px solid #9e6a03; }
+
+  .chevron {
+    color: #8b949e;
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .card.open .chevron { transform: rotate(90deg); }
+
+  .card-body {
+    display: none;
+    padding: 1.25rem;
+    gap: 1rem;
+  }
+
+  .card.open .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+  @media (max-width: 720px) {
+    .card.open .card-body { grid-template-columns: 1fr; }
+  }
+
+  .pane { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .pane-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .pane-label .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  .pane-label .dot-blue   { background: #388bfd; }
+  .pane-label .dot-green  { background: #3fb950; }
+  .pane-label .dot-red    { background: #f85149; }
+  .pane-label .dot-yellow { background: #e3b341; }
+
+  .pane-content {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+    flex: 1;
+  }
+
+  .pane-content p { margin-bottom: 0.6rem; }
+  .pane-content p:last-child { margin-bottom: 0; }
+
+  .pane-content code {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.8rem;
+    color: #d2a8ff;
+  }
+
+  .pane-content .where {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #21262d;
+    font-size: 0.8rem;
+    color: #8b949e;
+  }
+
+  .verdict-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .verdict-section { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  .verdict-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8b949e;
+  }
+
+  .verdict-section-body {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+  }
+
+  .verdict-section-body code {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.8rem;
+    color: #d2a8ff;
+  }
+
+  .summary-box {
+    max-width: 1100px;
+    margin: 2rem auto 0;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+
+  .summary-box h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8b949e;
+    margin-bottom: 0.75rem;
+  }
+
+  .summary-box p {
+    font-size: 0.875rem;
+    color: #c9d1d9;
+    line-height: 1.65;
+  }
+
+  .score-row {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .score-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .score-pill .n { font-size: 1.1rem; font-weight: 700; }
+  .score-pill.confirmed    .n { color: #3fb950; }
+  .score-pill.refuted      .n { color: #f85149; }
+  .score-pill.unverifiable .n { color: #e3b341; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PR #35372 — feat: Disable Optimize in no-db mode with fail-fast startup check</h1>
+  <div class="meta">
+    <span>📦 camunda/camunda</span>
+    <span>🔀 <a href="https://github.com/camunda/camunda/pull/35372" target="_blank" style="color:#58a6ff;text-decoration:none;">Pull Request #35372 ↗</a></span>
+    <span>🔖 Commit <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">e90ba640</code></span>
+    <span>📄 5 files changed: <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">Main.java</code>, <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">OptimizeDatabaseConfiguration.java</code> (+2 test files modified, 1 removed)</span>
+  </div>
+</header>
+
+<div class="alert">
+  <span class="icon">✗</span>
+  <div>
+    <strong>Critical wiring bug detected.</strong>
+    <code>CAMUNDA_OPTIMIZE_DATABASE</code> in <code>ConfigurationServiceConstants</code> equals the string <code>"CAMUNDA_OPTIMIZE_DATABASE"</code> — not <code>"camunda.database.type"</code>. The <code>System.setProperty()</code> call in <code>Main.java</code> therefore sets the wrong key and never activates the <code>@ConditionalOnProperty</code> on <code>OptimizeDatabaseConfiguration</code>. Integration tests inadvertently mask this by setting <code>"camunda.database.type"</code> directly, bypassing <code>overrideOptimizeDatabaseType()</code> entirely.
+  </div>
+</div>
+
+<div class="assumptions" id="assumptions"></div>
+
+<div class="summary-box" id="summary-box">
+  <h3>Overall Summary</h3>
+  <div class="score-row" id="score-row"></div>
+  <p id="summary-text"></p>
+</div>
+
+<script>
+const data = [
+  {
+    id: 1,
+    label: "CAMUNDA_OPTIMIZE_DATABASE resolves to the same key as @ConditionalOnProperty checks",
+    verdict: "refuted",
+    claim: `<code>Main.java</code> calls <code>System.setProperty(CAMUNDA_OPTIMIZE_DATABASE, DatabaseConfig.NONE)</code> where <code>CAMUNDA_OPTIMIZE_DATABASE</code> comes from <code>ConfigurationServiceConstants</code>. <code>OptimizeDatabaseConfiguration</code> uses <code>@ConditionalOnProperty(prefix = "camunda.database", name = "type")</code> — resolving to <code>"camunda.database.type"</code>. For <code>overrideOptimizeDatabaseType()</code> in <code>Main.java</code> to activate the Spring condition, <code>CAMUNDA_OPTIMIZE_DATABASE</code> must equal <code>"camunda.database.type"</code>. If they differ, the <code>@ConditionalOnProperty</code> path is never triggered via this code path.`,
+    where: `<code>ConfigurationServiceConstants.java</code> — read the value of <code>CAMUNDA_OPTIMIZE_DATABASE</code>. If it is not <code>"camunda.database.type"</code>, the wiring is broken.`,
+    evidence: `<code>ConfigurationServiceConstants.java</code> defines <code>CAMUNDA_OPTIMIZE_DATABASE = "CAMUNDA_OPTIMIZE_DATABASE"</code> (the uppercase string literal, not <code>"camunda.database.type"</code>). <code>Main.java</code> therefore calls <code>System.setProperty("CAMUNDA_OPTIMIZE_DATABASE", "none")</code> — a completely different key from what <code>@ConditionalOnProperty</code> checks. The wiring is broken: <code>overrideOptimizeDatabaseType()</code> sets a property that Spring never reads for this condition. The env-var-triggered fail-fast path is non-functional.`,
+  },
+  {
+    id: 2,
+    label: "The PR description accurately describes the commit under review",
+    verdict: "refuted",
+    claim: `The PR description says "Added an early startup check in <code>Main.java</code> that reads the global <code>camunda.database.type</code> configuration flag… Fails fast with a clear, actionable error message… Prevents any resource consumption." The commit diff (<code>e90ba640</code>) removes <code>checkForNoSecondaryStorageMode()</code> / <code>System.exit(1)</code> from <code>Main.java</code> and replaces them with Spring conditional configuration (<code>OptimizeDatabaseConfiguration</code>). The description describes a prior commit's approach, not this refactoring.`,
+    where: `The commit diff itself — the description is directly refuted by comparing what the diff adds vs. what the description claims.`,
+    evidence: `The commit diff shows: (1) all static helper methods and the <code>System.exit(1)</code> approach deleted from <code>Main.java</code>; (2) a new <code>OptimizeDatabaseConfiguration</code> class added with <code>@PostConstruct</code> throwing <code>IllegalStateException</code>; (3) <code>MainTest.java</code> deleted. The PR description describes a pre-Spring early check, but the commit's actual mechanism fires mid-Spring-context via <code>@PostConstruct</code>. Additionally, per Assumption 1, the wiring via <code>overrideOptimizeDatabaseType()</code> is broken. The description is materially misleading about both mechanism and correctness.`,
+  },
+  {
+    id: 3,
+    label: "getDatabaseType() property-lookup order is correct (system property over env var)",
+    verdict: "confirmed",
+    claim: `The new <code>getDatabaseType()</code> uses: <code>return System.getProperty("camunda.database.type", System.getenv("CAMUNDA_DATABASE_TYPE"));</code> — system property has higher priority than env var. The old deleted code checked env var first, then system property. The assumption is that system-property-first matches the priority order expected by the rest of the platform.`,
+    where: `Other callers of <code>camunda.database.type</code> / <code>CAMUNDA_DATABASE_TYPE</code> across the platform. Also check whether Spring Boot's relaxed binding already maps <code>CAMUNDA_DATABASE_TYPE</code> env var to <code>camunda.database.type</code>, which could cause double-resolution.`,
+    evidence: `Within the changed files, the logic is internally consistent: <code>System.getProperty</code> is checked first with the env var as fallback. The priority order is coherent for the standard Java/Spring convention where system properties override env vars. Whether this matches every other caller in the platform is outside the allowed scope; within the diff, no contradictory priority is visible. Note: this assumption is confirmed only for the internal logic — the broken wiring in Assumption 1 means this method's result may never reach its intended destination.`,
+  },
+  {
+    id: 4,
+    label: "@ConditionalOnProperty with havingValue = DatabaseConfig.NONE handles uppercase input",
+    verdict: "confirmed",
+    claim: `If an operator sets <code>CAMUNDA_DATABASE_TYPE=NONE</code> (uppercase), <code>getDatabaseType()</code> returns <code>"NONE"</code>, <code>equalsIgnoreCase</code> in <code>overrideOptimizeDatabaseType()</code> matches it, and sets the property to <code>DatabaseConfig.NONE</code> (lowercase <code>"none"</code>). Spring Boot's <code>@ConditionalOnProperty(havingValue = "none")</code> then matches. Test <code>shouldFailStartupWhenDatabaseTypeIsNoneUpperCase</code> covers this.`,
+    where: `<code>DatabaseConfig.java</code> — confirm <code>NONE = "none"</code>. Spring Boot <code>@ConditionalOnProperty</code> performs case-insensitive comparison via <code>havingValue</code>.`,
+    evidence: `<code>DatabaseConfig.java</code> confirms <code>NONE = "none"</code> (lowercase). <code>OptimizeDatabaseConfiguration.java</code> uses <code>havingValue = DatabaseConfig.NONE</code> = <code>"none"</code>. Spring Boot's <code>@ConditionalOnProperty</code> is case-insensitive for <code>havingValue</code>. <code>OptimizeNoSecondaryStorageIT.java</code> contains <code>shouldFailStartupWhenDatabaseTypeIsNoneUpperCase</code> which sets <code>System.setProperty("camunda.database.type", "NONE")</code> directly — this path works. Note: this assumption is confirmed for the <em>direct system-property path</em> but the <code>overrideOptimizeDatabaseType()</code> path remains broken per Assumption 1.`,
+  },
+  {
+    id: 5,
+    label: "@PostConstruct fires before Optimize consumes significant resources",
+    verdict: "unverifiable",
+    claim: `The PR claims the change "prevents any resource consumption." Using <code>@PostConstruct</code> fires during Spring context initialization — after component scanning has begun, not before Spring starts. The <code>IllegalStateException</code> causes a <code>BeanCreationException</code> and context refresh failure, but other beans may have already been initialized (e.g., database connections, import jobs).`,
+    where: `Spring Boot's bean ordering and <code>@DependsOn</code> annotations — check whether Optimize's expensive beans (database connections, data importers) initialize before or after <code>OptimizeDatabaseConfiguration</code>'s <code>@PostConstruct</code>.`,
+    evidence: `The changed files confirm the mechanism is <code>@PostConstruct</code> on <code>OptimizeDatabaseConfiguration.java</code>, firing mid-Spring-context-load. Whether Optimize's resource-heavy beans initialize before or after depends on bean dependency ordering and <code>@DependsOn</code> annotations across the broader Spring context — files that are outside the one-level-deep allowed scope. Cannot be determined from the changed files alone.`,
+  },
+  {
+    id: 6,
+    label: "OptimizeNoSecondaryStorageIT accurately tests the end-to-end fail-fast path",
+    verdict: "refuted",
+    claim: `<code>OptimizeNoSecondaryStorageIT</code> calls <code>Main.main()</code> and expects a <code>BeanCreationException</code> rooted in <code>IllegalStateException</code>. For this to work: (a) <code>overrideOptimizeDatabaseType()</code> must set the property correctly so <code>@ConditionalOnProperty</code> activates, (b) Spring must load <code>OptimizeDatabaseConfiguration</code>, and (c) <code>@PostConstruct</code> must throw and propagate. If Assumption 1 is false (wrong property key), the condition never activates and the test fails without an exception — giving false confidence.`,
+    where: `<code>OptimizeNoSecondaryStorageIT.java</code> — check exactly how <code>"camunda.database.type"</code> gets set in the test vs. how <code>Main.main()</code> would set it in production.`,
+    evidence: `<code>OptimizeNoSecondaryStorageIT.java</code> sets <code>System.setProperty("camunda.database.type", "none")</code> directly in each test <em>before</em> calling <code>Main.main(new String[]{})</code>. The test bypasses <code>overrideOptimizeDatabaseType()</code> entirely — the Spring condition is satisfied by the test setup, not by <code>Main.java</code>'s actual production code path. This masks the wiring bug: in a real deployment where only <code>CAMUNDA_DATABASE_TYPE</code> env var is set (no system property), <code>overrideOptimizeDatabaseType()</code> sets the wrong key, the condition never fires, and Optimize starts without error. The test gives false confidence.`,
+  },
+  {
+    id: 7,
+    label: "OptimizeNoSecondaryStorageFailureIT tests the real OptimizeDatabaseConfiguration class",
+    verdict: "confirmed",
+    claim: `The acceptance test uses <code>TestOptimizeConfiguration</code> — an inner static class with the same <code>@ConditionalOnProperty</code> — loaded via <code>AnnotationConfigApplicationContext</code>. It does NOT load <code>OptimizeDatabaseConfiguration</code> itself. If <code>OptimizeDatabaseConfiguration</code> has a different condition, missing import, or different behavior, this acceptance test still passes.`,
+    where: `Compare <code>OptimizeNoSecondaryStorageFailureIT.TestOptimizeConfiguration</code> annotations against <code>OptimizeDatabaseConfiguration</code> — specifically that <code>DatabaseConfig.NONE</code> resolves identically in both.`,
+    evidence: `<code>OptimizeNoSecondaryStorageFailureIT.java</code> uses <code>TestOptimizeConfiguration</code> — an inner <code>@Configuration</code> class with identical <code>@ConditionalOnProperty(prefix = "camunda.database", name = "type", havingValue = DatabaseConfig.NONE)</code> annotation — loaded via <code>AnnotationConfigApplicationContext</code>. It does NOT load <code>OptimizeDatabaseConfiguration</code> itself. <code>TestOptimizeConfiguration</code>'s constructor throws directly (not via <code>@PostConstruct</code>). If <code>OptimizeDatabaseConfiguration</code> had a wrong annotation, missing import, or wrong condition, this acceptance test would still pass. The concern identified in the assumption is confirmed as a real gap.`,
+  },
+  {
+    id: 8,
+    label: "Deleting MainTest.java leaves the new getDatabaseType() env-var fallback untested",
+    verdict: "confirmed",
+    claim: `<code>MainTest.java</code> was deleted. It tested the static helpers <code>isNoSecondaryStorageMode()</code> and <code>getDatabaseType()</code>. The replacement <code>getDatabaseType()</code> in <code>Main.java</code> has a new env-var fallback path (<code>System.getenv("CAMUNDA_DATABASE_TYPE")</code>). No unit test covers this. <code>OptimizeNoSecondaryStorageIT</code> only sets <code>System.setProperty("camunda.database.type", "none")</code> — it never exercises the env-var branch.`,
+    where: `<code>OptimizeNoSecondaryStorageIT.java</code> and any other test — grep for <code>CAMUNDA_DATABASE_TYPE</code> to check env-var coverage.`,
+    evidence: `<code>MainTest.java</code> is confirmed absent from the repo tree at commit <code>e90ba640</code> (deleted in this commit). <code>OptimizeNoSecondaryStorageIT.java</code> uses <code>System.setProperty("camunda.database.type", ...)</code> in both test methods — no test sets <code>CAMUNDA_DATABASE_TYPE</code> as an environment variable. No other test file within the changed files or their direct test counterparts covers this path. The env-var fallback branch in <code>getDatabaseType()</code> is entirely untested.`,
+  },
+];
+
+const summaryText = `The patch has a critical, non-obvious wiring bug (Assumption 1, refuted): <code>CAMUNDA_OPTIMIZE_DATABASE</code> constant equals the string <code>"CAMUNDA_OPTIMIZE_DATABASE"</code> — not <code>"camunda.database.type"</code> — so <code>System.setProperty(CAMUNDA_OPTIMIZE_DATABASE, DatabaseConfig.NONE)</code> in <code>Main.java</code> sets the wrong system property and never activates the <code>@ConditionalOnProperty</code> on <code>OptimizeDatabaseConfiguration</code>. Two integration tests (Assumptions 6 and 7) inadvertently mask this: <code>OptimizeNoSecondaryStorageIT</code> sets the correct property directly bypassing the broken code, and <code>OptimizeNoSecondaryStorageFailureIT</code> tests a proxy class rather than the real <code>OptimizeDatabaseConfiguration</code>. Additionally, <code>MainTest.java</code> was deleted leaving the env-var fallback untested. Overall confidence in the patch is low: the core env-var-triggered startup-failure path is non-functional as committed.`;
+
+const verdictMeta = {
+  confirmed:    { label: "✅ Confirmed",    cls: "badge-confirmed",    dot: "dot-green"  },
+  refuted:      { label: "❌ Refuted",      cls: "badge-refuted",      dot: "dot-red"    },
+  unverifiable: { label: "❓ Unverifiable", cls: "badge-unverifiable", dot: "dot-yellow" },
+};
+
+function buildCard(item) {
+  const vm = verdictMeta[item.verdict];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="num">A${item.id}</span>
+      <h2>${item.label}</h2>
+      <span class="badge ${vm.cls}">${vm.label}</span>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="card-body">
+      <div class="pane">
+        <div class="pane-label"><span class="dot dot-blue"></span>Phase 1 — Assumption</div>
+        <div class="pane-content">
+          <p>${item.claim}</p>
+          <div class="where"><strong>Where to look:</strong> ${item.where}</div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-label"><span class="dot ${vm.dot}"></span>Phase 2 — Verdict</div>
+        <div class="verdict-row">
+          <div class="verdict-section">
+            <div class="verdict-section-label">Evidence</div>
+            <div class="verdict-section-body">${item.evidence}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function toggleCard(header) {
+  const card = header.closest(".card");
+  card.classList.toggle("open");
+}
+
+const container = document.getElementById("assumptions");
+data.forEach(item => container.appendChild(buildCard(item)));
+
+// Score row
+const counts = { confirmed: 0, refuted: 0, unverifiable: 0 };
+data.forEach(d => counts[d.verdict]++);
+const scoreRow = document.getElementById("score-row");
+[
+  { key: "confirmed",    label: "Confirmed"    },
+  { key: "refuted",      label: "Refuted"      },
+  { key: "unverifiable", label: "Unverifiable" },
+].forEach(({ key, label }) => {
+  const pill = document.createElement("div");
+  pill.className = `score-pill ${key}`;
+  pill.innerHTML = `<span class="n">${counts[key]}</span><span>${label}</span>`;
+  scoreRow.appendChild(pill);
+});
+
+document.getElementById("summary-text").innerHTML = summaryText;
+
+// Open first card by default as a hint
+document.querySelectorAll(".card")[0].classList.add("open");
+</script>
+</body>
+</html>

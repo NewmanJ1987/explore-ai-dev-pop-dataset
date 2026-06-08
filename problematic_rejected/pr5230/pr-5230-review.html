@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PR #5230 — Assumption Verification Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+    padding: 2rem;
+  }
+
+  header {
+    max-width: 1100px;
+    margin: 0 auto 2.5rem;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 1.5rem;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #e6edf3;
+    margin-bottom: 0.4rem;
+  }
+
+  header .meta {
+    font-size: 0.85rem;
+    color: #8b949e;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+
+  header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  .alert {
+    max-width: 1100px;
+    margin: 0 auto 2rem;
+    background: #1c1306;
+    border: 1px solid #9e6a03;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    font-size: 0.875rem;
+    color: #e3b341;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .alert .icon { font-size: 1rem; margin-top: 0.05rem; flex-shrink: 0; }
+
+  .assumptions {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .card:hover { border-color: #58a6ff; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid #30363d;
+    background: #0d1117;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header:hover { background: #161b22; }
+
+  .card-header .num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+
+  .card-header h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e6edf3;
+    flex: 1;
+  }
+
+  .badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.2rem 0.65rem;
+    border-radius: 20px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .badge-confirmed  { background: #0d4429; color: #3fb950; border: 1px solid #238636; }
+  .badge-refuted    { background: #3d0914; color: #f85149; border: 1px solid #da3633; }
+  .badge-unverifiable { background: #1c2128; color: #e3b341; border: 1px solid #9e6a03; }
+
+  .chevron {
+    color: #8b949e;
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .card.open .chevron { transform: rotate(90deg); }
+
+  .card-body {
+    display: none;
+    padding: 1.25rem;
+    gap: 1rem;
+  }
+
+  .card.open .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+  @media (max-width: 720px) {
+    .card.open .card-body { grid-template-columns: 1fr; }
+  }
+
+  .pane { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .pane-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .pane-label .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  .pane-label .dot-blue   { background: #388bfd; }
+  .pane-label .dot-green  { background: #3fb950; }
+  .pane-label .dot-red    { background: #f85149; }
+  .pane-label .dot-yellow { background: #e3b341; }
+
+  .pane-content {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+    flex: 1;
+  }
+
+  .pane-content p { margin-bottom: 0.6rem; }
+  .pane-content p:last-child { margin-bottom: 0; }
+
+  .pane-content code {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.8rem;
+    color: #d2a8ff;
+  }
+
+  .pane-content .where {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #21262d;
+    font-size: 0.8rem;
+    color: #8b949e;
+  }
+
+  .verdict-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .verdict-section { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  .verdict-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8b949e;
+  }
+
+  .verdict-section-body {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+  }
+
+  .verdict-section-body code {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.8rem;
+    color: #d2a8ff;
+  }
+
+  .summary-box {
+    max-width: 1100px;
+    margin: 2rem auto 0;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+
+  .summary-box h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8b949e;
+    margin-bottom: 0.75rem;
+  }
+
+  .summary-box p {
+    font-size: 0.875rem;
+    color: #c9d1d9;
+    line-height: 1.65;
+  }
+
+  .score-row {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .score-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .score-pill .n { font-size: 1.1rem; font-weight: 700; }
+  .score-pill.confirmed  .n { color: #3fb950; }
+  .score-pill.refuted    .n { color: #f85149; }
+  .score-pill.unverifiable .n { color: #e3b341; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PR #5230 — feat: support my_service.py syntax for service loading</h1>
+  <div class="meta">
+    <span>📦 bentoml/BentoML</span>
+    <span>🔀 <a href="https://github.com/bentoml/BentoML/pull/5230" target="_blank" style="color:#58a6ff;text-decoration:none;">Pull Request #5230 ↗</a></span>
+    <span>🔖 Commit <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">0e837ef1</code></span>
+    <span>📄 2 files changed: <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">src/_bentoml_impl/loader.py</code>, <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">tests/unit/test_loader.py</code></span>
+  </div>
+</header>
+
+<div class="alert">
+  <span class="icon">⚠</span>
+  <div>
+    <strong>Commit vs PR diff discrepancy detected.</strong>
+    Commit <code>0e837ef1</code> uses <code>s.__class__.__name__</code> to extract service names,
+    while the current PR diff uses <code>s.inner.__name__</code>. These have different semantics —
+    the commit version is verified wrong (Assumption 5). All assumptions are annotated per version.
+  </div>
+</div>
+
+<div class="assumptions" id="assumptions"></div>
+
+<div class="summary-box" id="summary-box">
+  <h3>Overall Summary</h3>
+  <div class="score-row" id="score-row"></div>
+  <p id="summary-text"></p>
+</div>
+
+<script>
+const data = [
+  {
+    id: 1,
+    label: "Branch ordering in normalize_identifier is safe",
+    verdict: "confirmed",
+    claim: `The new <code>.py</code> file branch is inserted <em>before</em> the <code>service.py</code> directory fallback, meaning a path like <code>/some/dir/service.py</code> passed as a string would be handled by the new branch (returning <code>"service"</code> as module name and <code>/some/dir</code> as path) rather than the directory branch. This ordering is intentional and does not silently swallow directory-style invocations.`,
+    where: `<code>src/_bentoml_impl/loader.py</code> — the full <code>normalize_identifier</code> function, specifically the <code>elif</code> chain. Check what other branches precede and follow the new one.`,
+    evidence: `In <code>src/_bentoml_impl/loader.py</code> (PR branch), the full <code>elif</code> chain is:<br><br>
+      1. <code>path.is_file() and path.name == BENTO_YAML_FILENAME</code><br>
+      2. <code>path.is_dir() and path.joinpath(BENTO_YAML_FILENAME).is_file()</code><br>
+      3. <code>path.is_file() and path.name in DEFAULT_BENTO_BUILD_FILES</code><br>
+      4. <code>path.is_dir() and any(path.joinpath(f).is_file() ...)</code><br>
+      5. <strong><code>path.is_file() and path.suffix == ".py"</code></strong> (NEW)<br>
+      6. <code>path.joinpath("service.py").is_file()</code> — legacy<br><br>
+      The <code>path.is_file()</code> guard on branch 5 means directories always fall through to branch 6 unchanged. No collision is possible.`,
+  },
+  {
+    id: 2,
+    label: "path.stem reliably extracts a valid Python module name",
+    verdict: "unverifiable",
+    claim: `For any <code>.py</code> file, <code>path.stem</code> (e.g. <code>my_service</code> from <code>my_service.py</code>) always produces an importable module name. This assumes the filename has no dots before <code>.py</code> (e.g. <code>foo.bar.py</code> would give <code>foo.bar</code>, which is not a valid module name), and that the stem is directly used as the module identifier in downstream <code>import_service</code> calls.`,
+    where: `<code>src/_bentoml_impl/loader.py</code> — how the returned <code>module_name</code> from <code>normalize_identifier</code> is subsequently used in <code>import_service</code> or callers; check if there is any validation.`,
+    evidence: `<code>path.stem</code> is returned directly with no validation. For <code>foo.bar.py</code>, stem = <code>"foo.bar"</code> — not a valid Python module name, and would fail at <code>importlib.import_module</code>. No sanitization is performed before the stem is passed downstream. Fails loudly with <code>ImportServiceError</code> rather than silently, but the assumption itself is only safe under the convention that Python files use single-extension names. The PR adds no enforcement of this.`,
+  },
+  {
+    id: 3,
+    label: "path.parent is the correct bento_path for .py files",
+    verdict: "confirmed",
+    claim: `When no explicit <code>working_dir</code> is provided and a <code>.py</code> file is given, the PR returns <code>path.parent</code> as the bento/working path. This assumes that the directory containing the <code>.py</code> file is the correct root for resolving imports, configs, and other project files.`,
+    where: `<code>src/_bentoml_impl/loader.py</code> — how <code>bento_path</code> is used after <code>normalize_identifier</code> returns; compare with how other branches set the path.`,
+    evidence: `In <code>import_service</code>, <code>bento_path</code> is inserted into <code>sys.path</code> at position 0 — making the directory containing the <code>.py</code> file the module resolution root. This matches how all other branches handle working directories (bentofile.yaml, project-directory branches similarly use the file's containing folder). Test <code>test_normalize_identifier_py_file</code> asserts <code>path == tmp_path</code> (the parent of the <code>.py</code> file).`,
+  },
+  {
+    id: 4,
+    label: "Service objects have a .inner attribute with __name__ (PR diff version)",
+    verdict: "confirmed",
+    claim: `In the PR diff, <code>service_names = [s.inner.__name__ for s in all_services]</code> assumes that every element in <code>all_services</code> has an <code>.inner</code> attribute that is the original decorated class, and that <code>.__name__</code> on it returns the human-readable class name (e.g. <code>"Service1"</code>). If <code>.inner</code> does not exist or is not the class itself, this will raise <code>AttributeError</code> or produce wrong names.`,
+    where: `<code>src/_bentoml_sdk/service/factory.py</code> — the <code>Service</code> class definition; check whether <code>.inner</code> is a defined attribute. Also relevant: the test assertions for <code>"Service1"</code> and <code>"Service2"</code>.`,
+    evidence: `<code>src/_bentoml_sdk/service/factory.py</code> defines <code>Service</code> as an <code>@attrs.define</code> class with the field <code>inner: type[T]</code> — this is the original decorated user class. The <code>service()</code> decorator constructs <code>Service(config=config, inner=inner, ...)</code> where <code>inner</code> is the bare class. Therefore <code>s.inner.__name__</code> returns the user-defined class name (e.g., <code>"Service1"</code>). The field exists and is typed as <code>type[T]</code>.`,
+  },
+  {
+    id: 5,
+    label: "s.__class__.__name__ is wrong for service wrappers (commit version)",
+    verdict: "confirmed",
+    claim: `The commit (<code>0e837ef1</code>) uses <code>s.__class__.__name__</code> instead of <code>s.inner.__name__</code>. If service objects are instances of a generic wrapper class, then <code>s.__class__.__name__</code> would return the wrapper's class name rather than the user-defined class name, making the error message unhelpful or incorrect.`,
+    where: `<code>src/_bentoml_sdk/service/factory.py</code> — the wrapper class name. If named something generic, <code>s.__class__.__name__</code> would be wrong.`,
+    evidence: `<code>src/_bentoml_sdk/service/factory.py</code> defines the wrapper class as <code>class Service(t.Generic[T])</code>. Every instance's <code>__class__.__name__</code> returns <code>"Service"</code> — not the user-defined class name. The commit version would produce an error message like <code>"Available services: Service, Service"</code> — useless. The PR diff's <code>s.inner.__name__</code> is the correct fix. <strong>The commit SHA is definitively wrong.</strong>`,
+  },
+  {
+    id: 6,
+    label: "Backward compatibility with directory-based and service.py conventions",
+    verdict: "confirmed",
+    claim: `The PR claims backward compatibility. The new <code>.py</code> branch is inserted before the <code>service.py</code> directory check, so passing a directory path still falls through to the existing <code>service.py</code> check unmodified. A directory with a <code>service.py</code> inside is not mistakenly matched by the new branch (since <code>path.is_file()</code> would be <code>False</code> for a directory).`,
+    where: `<code>src/_bentoml_impl/loader.py</code> — confirm that <code>path.is_file()</code> correctly filters out directory inputs and that no existing call site accidentally matches the new branch.`,
+    evidence: `The guard <code>path.is_file() and path.suffix == ".py"</code> evaluates to <code>False</code> for any directory input, so directory paths fall through to the legacy branch unchanged. Test <code>test_normalize_identifier_service_py_backward_compatibility</code> explicitly verifies this: passing a directory containing <code>service.py</code> returns <code>module_name == "service"</code> and <code>path == service_dir</code>. No existing call site can accidentally match the new branch.`,
+  },
+  {
+    id: 7,
+    label: "The test for multiple services accurately reflects runtime behavior",
+    verdict: "unverifiable",
+    claim: `<code>test_import_service_multiple_services_error</code> writes a real <code>.py</code> file with two <code>@bentoml.service</code>-decorated classes, then calls <code>import_service</code>. This requires: (a) <code>@bentoml.service</code> works without a running server in a test context, (b) the module is actually imported (not mocked), and (c) the error is raised during the <code>import_service</code> call itself, not during decorator application.`,
+    where: `<code>src/_bentoml_impl/loader.py</code> — <code>import_service</code> implementation; check whether <code>@bentoml.service</code> has side effects (registration, server init) that would fail in a unit test.`,
+    evidence: `From <code>src/_bentoml_sdk/service/factory.py</code>, the <code>service()</code> decorator only calls an <code>@attrs.define</code> constructor — no server init or global registration for trivial classes. The <code>import_service</code> call adds <code>tmp_path</code> to <code>sys.path</code> and imports the file. However, whether <code>bentoml.service</code> is reachable in the test environment without side effects requires checking <code>bentoml/__init__.py</code>, which is <em>outside the allowed scope (one level of direct imports)</em>. Cannot fully confirm without CI.`,
+  },
+];
+
+const summaryText = `The core patch is structurally sound. Assumptions 1, 3, 4, 5, and 6 are all confirmed: the <code>elif</code> ordering correctly guards the new <code>.py</code> branch, <code>path.parent</code> is the right working root, <code>Service.inner</code> is a real <code>type[T]</code> field yielding correct class names, and the commit's <code>s.__class__.__name__</code> is definitively wrong (all wrappers are named <code>"Service"</code>). Two items need attention: (1) No validation of <code>path.stem</code> — filenames like <code>foo.bar.py</code> produce un-importable module names (low severity, fails with <code>ImportServiceError</code>); (2) The multi-service test depends on <code>@bentoml.service</code> being side-effect-free at import time, which is plausible from the decorator code but not fully verifiable without checking <code>bentoml/__init__.py</code> — warrants a CI run.`;
+
+const verdictMeta = {
+  confirmed:    { label: "✅ Confirmed",    cls: "badge-confirmed",    dot: "dot-green"  },
+  refuted:      { label: "❌ Refuted",      cls: "badge-refuted",      dot: "dot-red"    },
+  unverifiable: { label: "❓ Unverifiable", cls: "badge-unverifiable", dot: "dot-yellow" },
+};
+
+function buildCard(item) {
+  const vm = verdictMeta[item.verdict];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="num">A${item.id}</span>
+      <h2>${item.label}</h2>
+      <span class="badge ${vm.cls}">${vm.label}</span>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="card-body">
+      <div class="pane">
+        <div class="pane-label"><span class="dot dot-blue"></span>Phase 1 — Assumption</div>
+        <div class="pane-content">
+          <p>${item.claim}</p>
+          <div class="where"><strong>Where to look:</strong> ${item.where}</div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-label"><span class="dot ${vm.dot}"></span>Phase 2 — Verdict</div>
+        <div class="verdict-row">
+          <div class="verdict-section">
+            <div class="verdict-section-label">Evidence</div>
+            <div class="verdict-section-body">${item.evidence}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function toggleCard(header) {
+  const card = header.closest(".card");
+  card.classList.toggle("open");
+}
+
+const container = document.getElementById("assumptions");
+data.forEach(item => container.appendChild(buildCard(item)));
+
+// Score row
+const counts = { confirmed: 0, refuted: 0, unverifiable: 0 };
+data.forEach(d => counts[d.verdict]++);
+const scoreRow = document.getElementById("score-row");
+[
+  { key: "confirmed",    label: "Confirmed"    },
+  { key: "refuted",      label: "Refuted"      },
+  { key: "unverifiable", label: "Unverifiable" },
+].forEach(({ key, label }) => {
+  const pill = document.createElement("div");
+  pill.className = `score-pill ${key}`;
+  pill.innerHTML = `<span class="n">${counts[key]}</span><span>${label}</span>`;
+  scoreRow.appendChild(pill);
+});
+
+document.getElementById("summary-text").innerHTML = summaryText;
+
+// Open all cards by default (collapsed initially — click any to expand)
+// Expand first two as a hint
+document.querySelectorAll(".card")[0].classList.add("open");
+</script>
+</body>
+</html>

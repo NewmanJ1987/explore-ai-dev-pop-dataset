@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PR #589 — Assumption Verification Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.6; padding: 2rem; }
+  header { max-width: 1100px; margin: 0 auto 2.5rem; border-bottom: 1px solid #30363d; padding-bottom: 1.5rem; }
+  header h1 { font-size: 1.4rem; font-weight: 600; color: #e6edf3; margin-bottom: 0.4rem; }
+  header .meta { font-size: 0.85rem; color: #8b949e; display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  .alert { max-width: 1100px; margin: 0 auto 2rem; background: #1c1306; border: 1px solid #9e6a03; border-radius: 8px; padding: 1rem 1.25rem; font-size: 0.875rem; color: #e3b341; display: flex; gap: 0.75rem; align-items: flex-start; }
+  .alert .icon { font-size: 1rem; margin-top: 0.05rem; flex-shrink: 0; }
+  .assumptions { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; transition: border-color 0.15s; }
+  .card:hover { border-color: #58a6ff; }
+  .card-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.9rem 1.25rem; border-bottom: 1px solid #30363d; background: #0d1117; cursor: pointer; user-select: none; }
+  .card-header:hover { background: #161b22; }
+  .card-header .num { font-size: 0.7rem; font-weight: 700; background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 0.15rem 0.5rem; color: #8b949e; flex-shrink: 0; }
+  .card-header h2 { font-size: 0.95rem; font-weight: 600; color: #e6edf3; flex: 1; }
+  .badge { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.65rem; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
+  .badge-confirmed  { background: #0d4429; color: #3fb950; border: 1px solid #238636; }
+  .badge-refuted    { background: #3d0914; color: #f85149; border: 1px solid #da3633; }
+  .badge-unverifiable { background: #1c2128; color: #e3b341; border: 1px solid #9e6a03; }
+  .chevron { color: #8b949e; font-size: 0.8rem; transition: transform 0.2s; flex-shrink: 0; }
+  .card.open .chevron { transform: rotate(90deg); }
+  .card-body { display: none; padding: 1.25rem; gap: 1rem; }
+  .card.open .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  @media (max-width: 720px) { .card.open .card-body { grid-template-columns: 1fr; } }
+  .pane { display: flex; flex-direction: column; gap: 0.5rem; }
+  .pane-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #8b949e; display: flex; align-items: center; gap: 0.4rem; }
+  .pane-label .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .pane-label .dot-blue   { background: #388bfd; }
+  .pane-label .dot-green  { background: #3fb950; }
+  .pane-label .dot-red    { background: #f85149; }
+  .pane-label .dot-yellow { background: #e3b341; }
+  .pane-content { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 0.9rem 1rem; font-size: 0.85rem; color: #c9d1d9; flex: 1; }
+  .pane-content p { margin-bottom: 0.6rem; }
+  .pane-content p:last-child { margin-bottom: 0; }
+  .pane-content code { background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 0.1rem 0.35rem; font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.8rem; color: #d2a8ff; }
+  .pane-content .where { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #21262d; font-size: 0.8rem; color: #8b949e; }
+  .verdict-row { display: flex; flex-direction: column; gap: 0.75rem; }
+  .verdict-section { display: flex; flex-direction: column; gap: 0.3rem; }
+  .verdict-section-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; }
+  .verdict-section-body { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.85rem; color: #c9d1d9; }
+  .verdict-section-body code { background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 0.1rem 0.35rem; font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.8rem; color: #d2a8ff; }
+  .summary-box { max-width: 1100px; margin: 2rem auto 0; background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.25rem; }
+  .summary-box h3 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #8b949e; margin-bottom: 0.75rem; }
+  .summary-box p { font-size: 0.875rem; color: #c9d1d9; line-height: 1.65; }
+  .score-row { display: flex; gap: 1.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .score-pill { display: flex; align-items: center; gap: 0.5rem; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 0.4rem 0.85rem; font-size: 0.8rem; font-weight: 600; }
+  .score-pill .n { font-size: 1.1rem; font-weight: 700; }
+  .score-pill.confirmed .n { color: #3fb950; }
+  .score-pill.refuted .n { color: #f85149; }
+  .score-pill.unverifiable .n { color: #e3b341; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PR #589 — Add Info page, weather records display, and weather links to frontend</h1>
+  <div class="meta">
+    <span>📦 smart-irrigation</span>
+    <span>🔀 <a href="https://github.com/jeroenterheerdt/HAsmartirrigation/pull/589" target="_blank" style="color:#58a6ff;text-decoration:none;">Pull Request #589 ↗</a></span>
+    <span>📄 Files: <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">websockets.py</code>, <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">websockets.ts</code>, <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">view-info.ts</code>, <code style="background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.8rem;color:#d2a8ff">view-zones.ts</code>, docs</span>
+  </div>
+</header>
+
+<div class="alert">
+  <span class="icon">⚠</span>
+  <div>
+    <strong>Documentation contradicts implementation.</strong>
+    The PR description and <code>BACKEND_API_REQUIREMENTS.md</code> claim the backend is "stubs-only returning mock data." The diff shows fully implemented <code>hass.callWS()</code> calls and real WebSocket handlers. The documentation is stale and should be updated before merge.
+  </div>
+</div>
+
+<div class="assumptions" id="assumptions"></div>
+<div class="summary-box" id="summary-box">
+  <h3>Overall Summary</h3>
+  <div class="score-row" id="score-row"></div>
+  <p id="summary-text"></p>
+</div>
+
+<script>
+const data = [
+  {
+    id: 1,
+    label: "PR description misrepresents implementation as 'stubs-only'",
+    verdict: "confirmed",
+    claim: `The PR description repeatedly states "backend APIs are not yet implemented" and calls the websocket functions "stubs" returning mock data. In reality, the diff shows full backend implementation in <code>websockets.py</code> (<code>websocket_get_irrigation_info</code> and <code>websocket_get_weather_records</code>) and real <code>hass.callWS()</code> calls in <code>websockets.ts</code> — not mock data.`,
+    where: `<code>custom_components/smart_irrigation/websockets.py</code> lines ~247–457 for backend handlers; <code>frontend/src/data/websockets.ts</code> for the frontend calls; <code>TESTING.md</code> and <code>BACKEND_API_REQUIREMENTS.md</code>.`,
+    evidence: `<code>BACKEND_API_REQUIREMENTS.md</code> (added in the PR diff) explicitly states "The frontend currently includes stub implementations... These stubs should be replaced with actual WebSocket or HTTP API calls once the backend endpoints are implemented." However, the actual <code>websockets.py</code> contains fully implemented handlers, and <code>websockets.ts</code> uses real <code>hass.callWS()</code> calls — not mocks. The documentation is stale and contradicts the implementation.`,
+  },
+  {
+    id: 2,
+    label: "coordinator.get_total_duration_all_enabled_zones() method exists",
+    verdict: "confirmed",
+    claim: `<code>websocket_get_irrigation_info</code> calls <code>await coordinator.get_total_duration_all_enabled_zones()</code> to compute total irrigation duration. For this to work, the coordinator must expose this method with this exact name and return a numeric value in seconds.`,
+    where: `<code>custom_components/smart_irrigation/__init__.py</code> — search for <code>get_total_duration_all_enabled_zones</code>.`,
+    evidence: `<code>custom_components/smart_irrigation/__init__.py</code> line 2678 defines <code>async def get_total_duration_all_enabled_zones(self)</code> on the <code>SmartIrrigationCoordinator</code> class. It returns an integer (sum of <code>zone.get(const.ZONE_DURATION, 0)</code> for all enabled zones), matching the awaited call in <code>websockets.py</code>.`,
+  },
+  {
+    id: 3,
+    label: "coordinator.store.get_mapping() is synchronous and accepts an integer",
+    verdict: "confirmed",
+    claim: `<code>websocket_get_weather_records</code> calls <code>coordinator.store.get_mapping(int(mapping_id))</code>. The store must expose a synchronous <code>get_mapping</code> method (not <code>async_get_mapping</code>) that accepts an integer. The schema registers <code>mapping_id</code> as <code>vol.Coerce(str)</code> but then converts to int for the store call.`,
+    where: `<code>custom_components/smart_irrigation/store.py</code> — search for <code>get_mapping</code>; check sync vs async.`,
+    evidence: `<code>store.py</code> line 805 defines <code>def get_mapping(self, mapping_id: int) -> MappingEntry</code> as a synchronous <code>@callback</code> method. It accepts an int and returns <code>attr.asdict(res)</code> or <code>None</code>. The handler calls it without <code>await</code>, which is correct. The <code>vol.Coerce(str)</code> → <code>int(mapping_id)</code> coercion chain is valid.`,
+  },
+  {
+    id: 4,
+    label: "const.MAPPING_DATA, RETRIEVED_AT, and weather-related constants are defined",
+    verdict: "confirmed",
+    claim: `<code>websocket_get_weather_records</code> uses 13 constants from <code>const.py</code>: <code>MAPPING_DATA</code>, <code>RETRIEVED_AT</code>, <code>MAPPING_TEMPERATURE</code>, <code>MAPPING_HUMIDITY</code>, <code>MAPPING_PRECIPITATION</code>, <code>MAPPING_PRESSURE</code>, <code>MAPPING_WINDSPEED</code>, <code>MAPPING_SOLRAD</code>, <code>MAPPING_DEWPOINT</code>, <code>MAPPING_EVAPOTRANSPIRATION</code>, <code>MAPPING_MAX_TEMP</code>, <code>MAPPING_MIN_TEMP</code>, <code>MAPPING_CURRENT_PRECIPITATION</code>. All must be defined in <code>const.py</code>.`,
+    where: `<code>custom_components/smart_irrigation/const.py</code> — the diff only bumps the version; check pre-existing constant definitions.`,
+    evidence: `All 13 constants are present in <code>const.py</code>: <code>MAPPING_DATA = "data"</code>, <code>RETRIEVED_AT = "retrieved"</code>, and all 11 <code>MAPPING_*</code> weather fields (Temperature, Humidity, Precipitation, Pressure, Windspeed, Solar Radiation, Dewpoint, Evapotranspiration, Maximum Temperature, Minimum Temperature, Current Precipitation).`,
+  },
+  {
+    id: 5,
+    label: "const.ZONE_EXPLANATION, ZONE_BUCKET, ZONE_STATE, ZONE_DURATION and related constants are defined",
+    verdict: "confirmed",
+    claim: `<code>websocket_get_irrigation_info</code> uses <code>ZONE_EXPLANATION</code>, <code>ZONE_BUCKET</code>, <code>ZONE_STATE</code>, <code>ZONE_DURATION</code>, <code>ZONE_NAME</code>, <code>ZONE_ID</code>, <code>ZONE_STATE_AUTOMATIC</code>, <code>ZONE_STATE_MANUAL</code>. All must exist in <code>const.py</code>.`,
+    where: `<code>custom_components/smart_irrigation/const.py</code> — search for <code>ZONE_STATE_AUTOMATIC</code>, <code>ZONE_STATE_MANUAL</code>, <code>ZONE_EXPLANATION</code>, <code>ZONE_DURATION</code>.`,
+    evidence: `All constants are defined in <code>const.py</code>: <code>ZONE_EXPLANATION = "explanation"</code>, <code>ZONE_BUCKET = "bucket"</code>, <code>ZONE_STATE = "state"</code>, <code>ZONE_DURATION = "duration"</code>, <code>ZONE_NAME = "name"</code>, <code>ZONE_ID = "id"</code>, <code>ZONE_STATE_AUTOMATIC = "automatic"</code>, <code>ZONE_STATE_MANUAL = "manual"</code>, <code>ZONE_STATE_DISABLED = "disabled"</code>.`,
+  },
+  {
+    id: 6,
+    label: "Fallback datetime is timezone-naive and could cause TypeError on comparison",
+    verdict: "confirmed",
+    claim: `The irrigation info handler parses <code>next_rising</code> using <code>datetime.fromisoformat(...replace('Z', '+00:00'))</code> (timezone-aware). The fallback creates <code>datetime.datetime.now()</code> (naive/local). A <code>datetime</code> object is always truthy, so the guard <code>if not sunrise_time or not next_irrigation_start:</code> fails to catch partial parse failures. Mixed naive/aware datetimes raise <code>TypeError</code> on comparison.`,
+    where: `<code>websockets.py</code> lines ~11248–11282 in the diff — the <code>try/except</code> around <code>fromisoformat</code> only catches <code>ValueError, TypeError</code>.`,
+    evidence: `<strong>Issue is real but mitigated.</strong> <code>datetime.fromisoformat(...replace('Z', '+00:00'))</code> produces a timezone-aware datetime. The fallback uses <code>datetime.datetime.now()</code> (naive). A partial parse failure that sets <code>sunrise_time</code> but not <code>next_irrigation_start</code> would not be caught by the truthiness guard. However, <code>_safe_parse_datetime</code> in the file converts aware datetimes to naive UTC before comparison, reducing (but not eliminating) the mixed-tzinfo risk. The serialized <code>sunrise_time.isoformat()</code> in the fallback path would emit a naive (no-timezone) timestamp.`,
+  },
+  {
+    id: 7,
+    label: "Weather records timestamp and retrieval_time are always the same value",
+    verdict: "confirmed",
+    claim: `In <code>websocket_get_weather_records</code>, both <code>timestamp_str</code> and <code>retrieval_time_str</code> are derived from <code>data_point.get(const.RETRIEVED_AT)</code> — there is no separate measurement timestamp field. The "Time" column and "Retrieved" column in the frontend will always show identical values.`,
+    where: `<code>websockets.py</code> lines ~11373–11401 in the diff — both variables are assigned from <code>retrieval_time = data_point.get(const.RETRIEVED_AT)</code>.`,
+    evidence: `Confirmed. Both <code>timestamp_str</code> and <code>retrieval_time_str</code> are assigned from <code>retrieval_time = data_point.get(const.RETRIEVED_AT)</code>. There is no separate observation-time field. The "Time" and "Retrieved" frontend columns will always show the same value — the UI distinction is misleading.`,
+  },
+  {
+    id: 8,
+    label: "next_irrigation_duration and total_irrigation_duration carry the same value",
+    verdict: "confirmed",
+    claim: `The backend sets both <code>next_irrigation_duration</code> and <code>total_irrigation_duration</code> to <code>int(total_duration)</code>. The PR description describes these as distinct concepts ("duration for the next cycle" vs "total duration for all zones") but they are identical in implementation.`,
+    where: `<code>websockets.py</code> lines ~11303–11310 in the diff.`,
+    evidence: `Confirmed. Lines ~410–412 build the <code>irrigation_info</code> dict with <code>"next_irrigation_duration": int(total_duration)</code> and <code>"total_irrigation_duration": int(total_duration)</code> — both from the same <code>total_duration</code> variable. They are always equal. Whether this is intentional or a simplification is unclear from the diff alone.`,
+  },
+  {
+    id: 9,
+    label: "Subscription type DOMAIN + '_config_updated' matches what the backend registers",
+    verdict: "confirmed",
+    claim: `<code>view-info.ts</code> subscribes to <code>{ type: DOMAIN + "_config_updated" }</code> to know when to refresh data. The backend must fire a WebSocket event with this exact type. The registered websocket commands use <code>"/"</code> as separator but the subscription uses <code>"_"</code> — if they don't match, the view will never auto-refresh.`,
+    where: `<code>websockets.py</code> — existing <code>async_register_websockets</code> and any event-firing code; search for <code>fire</code> or <code>async_fire</code> with <code>config_updated</code>.`,
+    evidence: `<code>websockets.py</code> lines ~49–51 register <code>handle_subscribe_updates</code> with <code>@decorators.websocket_command({ vol.Required("type"): const.DOMAIN + "_config_updated" })</code>. The <code>view-info.ts</code> subscription uses <code>{ type: DOMAIN + "_config_updated" }</code> — an exact match. The separator difference (<code>"_"</code> vs <code>"/"</code>) is intentional: <code>"_config_updated"</code> is a subscription command type, while <code>"/info"</code> and <code>"/weather_records"</code> are request types.`,
+  },
+  {
+    id: 10,
+    label: "handleViewWeatherInfo in view-zones.ts uses Object.values(this.zones).at(index) correctly",
+    verdict: "refuted",
+    claim: `The weather info button handler calls <code>Object.values(this.zones).at(index)</code> where <code>this.zones</code> is typed as <code>SmartIrrigationZone[]</code>. If <code>zones</code> is ever a plain object keyed by non-sequential integers, iteration order may not match the rendered <code>index</code>, leading to the wrong zone's mapping ID being shown.`,
+    where: `<code>frontend/src/views/zones/view-zones.ts</code> — how <code>zones</code> is populated and iterated in the render loop that assigns <code>index</code>.`,
+    evidence: `<strong>Concern is resolved in the actual code.</strong> <code>view-zones.ts</code> line 418–419 shows a comment: <em>"Use direct array access instead of Object.values() to ensure correct zone mapping"</em> followed by <code>const zone = this.zones[index];</code>. The <code>Object.values().at(index)</code> pattern was apparently considered and rejected. <code>this.zones</code> is populated as a <code>SmartIrrigationZone[]</code> array; direct index access is safe when <code>index</code> comes from the render loop over the same array.`,
+  },
+];
+
+const summaryText = `The patch is largely correct and functionally coherent. All backend constants, the coordinator method, and the store's synchronous <code>get_mapping</code> are confirmed to exist with the expected signatures. The most actionable findings are: (1) the <code>BACKEND_API_REQUIREMENTS.md</code> and <code>TESTING.md</code> documentation falsely describes the frontend functions as stubs returning mock data, when in fact fully wired <code>hass.callWS()</code> calls are already in place — this documentation should be updated before merge; (2) the timezone handling in <code>websocket_get_irrigation_info</code> has a latent inconsistency where a partial parse failure could mix timezone-aware and naive datetimes, though the most common failure modes are safely handled; (3) the <code>timestamp</code> and <code>retrieval_time</code> fields in weather records are always identical — the UI distinction between "Time" and "Retrieved" columns is misleading. No refuted assumptions require blocking changes, but issues 1 and 3 are worth addressing.`;
+
+const verdictMeta = {
+  confirmed:    { label: "✅ Confirmed",    cls: "badge-confirmed",    dot: "dot-green"  },
+  refuted:      { label: "❌ Refuted",      cls: "badge-refuted",      dot: "dot-red"    },
+  unverifiable: { label: "❓ Unverifiable", cls: "badge-unverifiable", dot: "dot-yellow" },
+};
+
+function buildCard(item) {
+  const vm = verdictMeta[item.verdict];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="num">A${item.id}</span>
+      <h2>${item.label}</h2>
+      <span class="badge ${vm.cls}">${vm.label}</span>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="card-body">
+      <div class="pane">
+        <div class="pane-label"><span class="dot dot-blue"></span>Phase 1 — Assumption</div>
+        <div class="pane-content">
+          <p>${item.claim}</p>
+          <div class="where"><strong>Where to look:</strong> ${item.where}</div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-label"><span class="dot ${vm.dot}"></span>Phase 2 — Verdict</div>
+        <div class="verdict-row">
+          <div class="verdict-section">
+            <div class="verdict-section-label">Evidence</div>
+            <div class="verdict-section-body">${item.evidence}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function toggleCard(header) { header.closest(".card").classList.toggle("open"); }
+
+const container = document.getElementById("assumptions");
+data.forEach(item => container.appendChild(buildCard(item)));
+
+const counts = { confirmed: 0, refuted: 0, unverifiable: 0 };
+data.forEach(d => counts[d.verdict]++);
+const scoreRow = document.getElementById("score-row");
+[{ key: "confirmed", label: "Confirmed" }, { key: "refuted", label: "Refuted" }, { key: "unverifiable", label: "Unverifiable" }].forEach(({ key, label }) => {
+  const pill = document.createElement("div");
+  pill.className = `score-pill ${key}`;
+  pill.innerHTML = `<span class="n">${counts[key]}</span><span>${label}</span>`;
+  scoreRow.appendChild(pill);
+});
+document.getElementById("summary-text").innerHTML = summaryText;
+document.querySelectorAll(".card")[0].classList.add("open");
+</script>
+</body>
+</html>
