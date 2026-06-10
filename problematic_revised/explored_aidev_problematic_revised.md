@@ -23,18 +23,46 @@ The review category breakdown of all **24,014 merged PRs** was:
 | **Changes requested + Dismissed → Approved** | **41** |
 | Dismissed, no approval | 14 |
 
-**Problematic-Revised = 386 + 41 = 427 cases**
-
-These are the two categories where a `CHANGES_REQUESTED` state was present and the PR was eventually approved and merged. The `dismissed_and_changes_requested_then_approved` group includes cases where some reviews were dismissed (e.g., by the agent re-pushing) but at least one human ultimately approved.
+**Problematic-Revised (raw) = 386 + 41 = 427 cases**
 
 ---
 
-## Key Characteristics
+## Filters Applied
 
-- **427 total cases** (~1.8% of all merged PRs)
-- All are **merged** — the revision process succeeded
-- All have **at least one human APPROVED** review after a `CHANGES_REQUESTED` review
-- The agent/developer had to make additional commits in response to reviewer feedback
+Two noise filters are applied to the raw 427, implemented in `explore_aidev_problematic_revised.ipynb`:
+
+1. **Remove bot-approved PRs** — `APPROVED` review must be from `user_type == 'User'`
+   → 427 → **403**
+
+2. **Require human `CHANGES_REQUESTED`** — `CHANGES_REQUESTED` review must also be from `user_type == 'User'`
+   → 403 → **397**
+
+---
+
+## Clean Subset Summary
+
+| Metric | Value |
+|---|---|
+| **Total PRs (clean)** | **397** |
+| `changes_requested_then_approved` | 364 |
+| `changes_requested_and_dismissed_then_approved` | 33 |
+| PRs with inline CR comments | 300 |
+| Total inline CR comments | 1,107 |
+| Reviews on revised PRs | 3,079 |
+| Commits on revised PRs | 3,107 |
+
+---
+
+## Squash Detection
+
+Commit counts per PR were computed to identify squashed PRs (single-commit merges that hide the revision history):
+
+| | Count |
+|---|---|
+| Non-squashed (>1 commit) | 390 |
+| Likely squashed (1 commit) | 7 |
+
+For non-squashed PRs, the commit count distribution: mean **7.9**, median **6**, max **30**.
 
 ---
 
@@ -52,39 +80,21 @@ Relevant tables and fields for this subset:
 
 ---
 
-## Filtering Considerations
+## What the Notebook Does
 
-Before using this subset, filter out noise:
-
-1. **Bot-only revisions**: if the additional commits after `CHANGES_REQUESTED` were made by a bot (e.g., `github-actions[bot]`, `copilot-swe-agent[bot]`) rather than the agent, the "revision" is not substantive agent behaviour.
-
-2. **Trivial fixes**: commits with messages like "fix typo", "bump version", "rebase" — these don't represent meaningful agent reasoning in response to review.
-
-3. **Dismissals that skip the review**: if a `CHANGES_REQUESTED` was dismissed without addressing the feedback, that PR should not be counted as a genuine revision cycle. The `changes_requested_and_dismissed_then_approved` group (41 cases) needs inspection to check whether dismissals were legitimate.
-
-4. **Self-approvals**: verify `user_type == 'User'` for APPROVED reviews (the dataset includes bot reviewers such as `copilot-pull-request-reviewer[bot]` and `coderabbitai[bot]`).
+1. **Extracts the 427 raw PR ids** using `categorize()` from `helpers.py`
+2. **Applies the two human-only filters** → 397 clean PRs
+3. **Pulls inline review comments** from `CHANGES_REQUESTED` reviews → 300 PRs, 1,107 comments
+4. **Computes commit counts** per PR to flag squashed revisions
+5. **Samples a PR** for manual inspection (reviews, commits with URLs, inline CR comments)
 
 ---
 
-## Suggested Next Steps
+## Remaining Considerations
 
-1. **Extract the 427 PR ids** using the `categorize()` logic from the notebook:
-   ```python
-   revised_prs = merged_copy[
-       merged_copy['review_category'].isin([
-           'changes_requested_then_approved',
-           'changes_requested_and_dismissed_then_approved'
-       ])
-   ]
-   ```
-
-2. **Reconstruct revision cycles**: for each PR, order all reviews and commits by timestamp to identify which commits were pushed *after* the `CHANGES_REQUESTED` review — these are the agent's revisions.
-
-3. **Extract inline review comments** (`rev_cmts`) associated with the `CHANGES_REQUESTED` reviews to understand *what* the reviewer asked the agent to fix.
-
-4. **Apply noise filters** (see above) and count the clean subset.
-
-5. **Sample and manually inspect** 20–30 cases to validate that the revision was substantive and agent-driven.
+- **Bot-only revisions**: commits after `CHANGES_REQUESTED` by bots (e.g., `github-actions[bot]`) rather than the agent are not yet filtered — worth checking per-commit `author`.
+- **Trivial fix commits**: "fix typo", "bump version", "rebase" commits don't represent meaningful agent reasoning; could be excluded from revision cycle analysis.
+- **Dismissed-then-approved group (33 cases)**: verify whether dismissals were legitimate bypasses or genuine review resolutions.
 
 ---
 
@@ -92,7 +102,7 @@ Before using this subset, filter out noise:
 
 | Subset | Count | Source |
 |---|---|---|
-| **Problematic-Revised** (this file) | 427 | Changes requested → revised → approved → merged |
+| **Problematic-Revised** (this file) | 397 | Changes requested → revised → approved → merged |
 | Problematic-Reject | 7,270 | Closed without merge |
 | Accepted | 3,444 | At least one approval, merged |
 | Merged, no approval | 20,031 | Merged with no formal review approval |
